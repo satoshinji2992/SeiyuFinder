@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+
+# Sensitive
+.env
+
+# Large models and data
+AdaFace/.git/
+AdaFace/pretrained/
+AdaFace/assets/
+AdaFace/validation_*/
+AdaFace/__pycache__/
+# features.npz is tracked intentionally
+
+# User data
+uploads/
+results/
+faces/
+tests/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
