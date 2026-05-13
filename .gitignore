@@ -23,6 +23,10 @@ results/
 faces/
 tests/
 
+# Logs
+output.log
+nohup.out
+
 # OS
 .DS_Store
 Thumbs.db

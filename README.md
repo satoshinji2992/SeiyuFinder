@@ -28,9 +28,9 @@
 ## 快速开始
 
 ```bash
-# 1. 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate
+# 1. 创建 conda 环境
+conda create -n seiyufinder python=3.10
+conda activate seiyufinder
 pip install opencv-python numpy torch pytorch-lightning
 
 # 2. 注册人脸

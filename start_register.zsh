@@ -1,4 +1,4 @@
 #!/bin/zsh
 cd "$(dirname "$0")"
-source venv/bin/activate
+conda activate seiyufinder
 python3 register.py "$@"
