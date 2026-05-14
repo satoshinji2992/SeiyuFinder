@@ -14,6 +14,8 @@
 
 ```
 ├── faces/                  # 正式人脸库：faces/<团>/<声优>/
+├── avatar/                 # 前端展示头像：avatar/<声优>/1.jpg
+├── icon/                   # 前端展示团标：icon/<团>.png
 ├── faces_upload/           # 用户上传的待审核数据集照片，不提交 Git
 ├── uploads/                # 识别历史压缩图与 history.json，不提交 Git
 ├── AdaFace/                # AdaFace 模型仓库
@@ -309,6 +311,14 @@ faces/
 └── avemujica/
     └── 渡瀬結月/
 ```
+
+前端识别结果展示的头像单独放在：
+
+```text
+avatar/<声优>/1.jpg
+```
+
+服务端收到 `/avatar/<声优>` 请求时，会优先读取 `avatar/` 目录；如果没有找到头像，会临时回退到 `faces/` 中对应声优目录下的 `1.jpg`。
 
 添加或修改正式照片后：
 

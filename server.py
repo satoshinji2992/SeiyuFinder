@@ -1,6 +1,5 @@
 import os
 import sys
-import glob
 import socket
 import argparse
 import numpy as np
@@ -18,6 +17,8 @@ import uuid
 import re
 
 UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+AVATAR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "avatar")
+ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon")
 FACES_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "faces_upload"
 )
@@ -25,6 +26,8 @@ FEEDBACK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedbac
 FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "feedback.jsonl")
 HISTORY_FILE = os.path.join(UPLOADS_DIR, "history.json")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+os.makedirs(AVATAR_DIR, exist_ok=True)
+os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(FACES_UPLOAD_DIR, exist_ok=True)
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 
@@ -74,6 +77,54 @@ def safe_filename(filename):
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         ext = ".jpg"
     return f"{stem}{ext}"
+
+
+def image_content_type(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".png":
+        return "image/png"
+    if ext == ".webp":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def find_avatar_file(name):
+    safe_name = safe_path_segment(name, "")
+    if not safe_name:
+        return None
+    avatar_dir = os.path.join(AVATAR_DIR, safe_name)
+    if os.path.isdir(avatar_dir):
+        for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+            photo = os.path.join(avatar_dir, "1" + ext)
+            if os.path.exists(photo):
+                return photo
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    faces_base = os.path.join(base_dir, "faces")
+    if not os.path.isdir(faces_base):
+        return None
+    for band_dir in sorted(os.scandir(faces_base), key=lambda e: e.name):
+        if not band_dir.is_dir():
+            continue
+        faces_dir = os.path.join(band_dir.path, safe_name)
+        if not os.path.isdir(faces_dir):
+            continue
+        for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+            photo = os.path.join(faces_dir, "1" + ext)
+            if os.path.exists(photo):
+                return photo
+    return None
+
+
+def find_icon_file(name):
+    safe_name = safe_path_segment(name, "")
+    if not safe_name:
+        return None
+    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        icon = os.path.join(ICON_DIR, safe_name + ext)
+        if os.path.exists(icon):
+            return icon
+    return None
 
 
 def directory_size(path):
@@ -455,24 +506,26 @@ class FaceHandler(BaseHTTPRequestHandler):
                 self.wfile.write(f.read())
         elif self.path.startswith("/avatar/"):
             name = urllib.parse.unquote(self.path[len("/avatar/"):])
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            faces_dir = None
-            for band_dir in glob.glob(os.path.join(base_dir, "faces", "*")):
-                candidate = os.path.join(band_dir, name)
-                if os.path.isdir(candidate):
-                    faces_dir = candidate
-                    break
-            if os.path.isdir(faces_dir):
-                for ext in [".jpg", ".jpeg", ".png"]:
-                    photo = os.path.join(faces_dir, "1" + ext)
-                    if os.path.exists(photo):
-                        self.send_response(200)
-                        ct = "image/jpeg" if ext != ".png" else "image/png"
-                        self.send_header("Content-Type", ct)
-                        self.end_headers()
-                        with open(photo, "rb") as f:
-                            self.wfile.write(f.read())
-                        return
+            photo = find_avatar_file(name)
+            if photo:
+                self.send_response(200)
+                self.send_header("Content-Type", image_content_type(photo))
+                self.end_headers()
+                with open(photo, "rb") as f:
+                    self.wfile.write(f.read())
+                return
+            self.send_response(404)
+            self.end_headers()
+        elif self.path.startswith("/icon/"):
+            name = urllib.parse.unquote(self.path[len("/icon/"):])
+            icon = find_icon_file(name)
+            if icon:
+                self.send_response(200)
+                self.send_header("Content-Type", image_content_type(icon))
+                self.end_headers()
+                with open(icon, "rb") as f:
+                    self.wfile.write(f.read())
+                return
             self.send_response(404)
             self.end_headers()
         elif self.path == "/people":

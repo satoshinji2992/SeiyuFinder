@@ -92,18 +92,46 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            min-height: 34px;
-            padding: 0 10px;
+            justify-content: center;
+            width: 82px;
+            height: 38px;
+            padding: 4px 10px;
             border: 1px solid #34344f;
-            border-radius: 17px;
+            border-radius: 12px;
             background: #101020;
             color: #d6d6e6;
             font-size: 13px;
             cursor: pointer;
+            transition: border-color 0.2s, background 0.2s, transform 0.2s;
         }
 
         .band-option input {
-            accent-color: #c44dff;
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .band-option:has(input:checked) {
+            border-color: rgba(255, 107, 157, 0.9);
+            background: rgba(196, 77, 255, 0.14);
+        }
+
+        .band-option:hover {
+            transform: translateY(-1px);
+            border-color: rgba(196, 77, 255, 0.65);
+        }
+
+        .band-logo {
+            max-width: 64px;
+            max-height: 26px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .band-logo-fallback {
+            font-size: 12px;
+            font-weight: 700;
+            color: #d6d6e6;
         }
 
         .band-option.recommended {
@@ -867,6 +895,20 @@
         let datasetCounts = {};
         const defaultRecognitionBands = ['mygo', 'avemujica', 'sumimi'];
         const pageScaleKey = 'seiyuumatchPageScale';
+        const bandIconNames = new Set([
+            'afterglow',
+            'avemujica',
+            'dumbrock',
+            'hhw',
+            'mewtype',
+            'millsage',
+            'morfonica',
+            'mygo',
+            'pastel',
+            'ppp',
+            'ras',
+            'roselia'
+        ]);
 
         function unlockPrivacyNotice() {
             document.body.classList.remove('privacy-locked');
@@ -958,10 +1000,13 @@
             bandFilterOptions.innerHTML = bands.map(band => {
                 const checked = defaultRecognitionBands.includes(band) ? 'checked' : '';
                 const recommended = defaultRecognitionBands.includes(band) ? ' recommended' : '';
+                const visual = bandIconNames.has(band)
+                    ? `<img class="band-logo" src="/icon/${encodeURIComponent(band)}" alt="${band}" title="${band}">`
+                    : `<span class="band-logo-fallback" title="${band}">${band}</span>`;
                 return `
-      <label class="band-option${recommended}">
+      <label class="band-option${recommended}" title="${band}">
         <input type="checkbox" name="recognitionBand" value="${band}" ${checked}>
-        <span>${band}</span>
+        ${visual}
       </label>
     `;
             }).join('');
