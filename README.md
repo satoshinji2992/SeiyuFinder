@@ -51,6 +51,34 @@ pip install opencv-python numpy torch pytorch-lightning pillow requests
 http://localhost:3724
 ```
 
+## 环境检测与性能测试
+
+服务器配好环境后，可以先运行：
+
+```bash
+python3 bench_env.py
+```
+
+它会输出 Python、Torch、CPU、内存、模型加载时间，并从 `tests/` 或 `faces/` 自动选几张图跑识别耗时测试。
+
+常用参数：
+
+```bash
+# 指定一张图片测试
+python3 bench_env.py --image tests/羊宫妃那.png
+
+# 测试更多轮，观察平均耗时和 P95
+python3 bench_env.py --samples 5 --rounds 5
+
+# 临时指定 PyTorch CPU 线程数
+python3 bench_env.py --torch-threads 4
+
+# 测试低阈值识别
+python3 bench_env.py --relaxed
+```
+
+如果单次识别平均耗时超过 5 秒，可以优先尝试降低 `server.py` 里的 `MAX_IMAGE_DIM`，例如从 `1280` 调到 `960`。
+
 ## Cloudflare Tunnel
 
 ### 固定域名
