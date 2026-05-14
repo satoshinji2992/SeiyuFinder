@@ -1179,14 +1179,50 @@
         function recognizeBuffer(buffer, relaxed) {
             const apiBase = '//' + location.host;
             const params = new URLSearchParams();
+            params.set('async', '1');
             if (relaxed) params.set('mode', 'relaxed');
             params.set('bands', getSelectedRecognitionBands().join(','));
             const url = apiBase + '/?' + params.toString();
             return fetch(url, { method: 'POST', body: buffer })
                 .then(async r => {
-                    const data = await r.json();
+                    const text = await r.text();
+                    let data = {};
+                    try {
+                        data = text ? JSON.parse(text) : {};
+                    } catch {
+                        throw new Error(text || '服务器返回格式异常');
+                    }
                     if (!r.ok) throw new Error(data.error || 'request failed');
                     return data;
+                })
+                .then(data => {
+                    if (!data.job_id) return data;
+                    loadingText.textContent = '已加入识别队列...';
+                    return pollRecognitionJob(data.job_id);
+                });
+        }
+
+        function pollRecognitionJob(jobId, startedAt = Date.now()) {
+            const apiBase = '//' + location.host;
+            return fetch(`${apiBase}/job/${encodeURIComponent(jobId)}`)
+                .then(async r => {
+                    const text = await r.text();
+                    let data = {};
+                    try {
+                        data = text ? JSON.parse(text) : {};
+                    } catch {
+                        throw new Error(text || '服务器返回格式异常');
+                    }
+                    if (!r.ok) throw new Error(data.error || 'request failed');
+                    if (data.status === 'done') return data.result;
+                    if (data.status === 'failed') throw new Error(data.error || '识别任务失败');
+                    if (Date.now() - startedAt > 90000) throw new Error('识别等待超时，请稍后再试');
+                    loadingText.textContent = data.status === 'running'
+                        ? '正在识别中...'
+                        : '排队中，请稍候...';
+                    return new Promise(resolve => {
+                        setTimeout(() => resolve(pollRecognitionJob(jobId, startedAt)), 700);
+                    });
                 });
         }
 
@@ -1203,14 +1239,20 @@
                 .catch(showError);
         }
 
-        function showError() {
+        function showError(err) {
+            console.error(err);
             loading.style.display = 'none';
             results.style.display = 'block';
-            results.innerHTML = '<p style="color:#ff6b9d;text-align:center">识别失败，请重试</p>';
+            results.innerHTML = '';
+            const message = document.createElement('p');
+            message.style.color = '#ff6b9d';
+            message.style.textAlign = 'center';
+            message.textContent = `识别失败：${err && err.message ? err.message : '请重试'}`;
+            results.appendChild(message);
             retry.style.display = 'inline-block';
         }
 
-        function resizeImage(file, maxSize = 1280, quality = 0.86) {
+        function resizeImage(file, maxSize = 960, quality = 0.84) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 const url = URL.createObjectURL(file);

@@ -1,13 +1,19 @@
 # SeiyuuMatch
 
-当前版本：`1.0.0`
+当前版本：`1.0.1`
 
 > 拍张照，测测你长得最像邦多利哪位女声优 🎸
 
-[![Version](https://img.shields.io/badge/version-1.0.0-ff6b9d)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-ff6b9d)](./CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-online-c44dff)](#)
 [![Dataset](https://img.shields.io/badge/dataset-48%20seiyuu-6c5ce7)](#)
 [![Privacy](https://img.shields.io/badge/privacy-upload%20notice-2d3436)](#隐私说明)
+
+## 运行界面
+
+![SeiyuuMatch 页面预览](./example/page.png)
+
+![识别结果预览](./example/recognize.png)
 
 ## 功能一览
 
@@ -74,107 +80,55 @@ python3 -u server.py --host 127.0.0.1 --port 3724
 http://localhost:3724
 ```
 
-## API
+## 公开部署
 
-#### GET `/`
+公开推广时推荐使用双进程部署，可以缓解多人同时上传时的排队：
 
-返回 Web 页面。
+```
+Cloudflare Tunnel
+        ↓
+nginx 8080
+        ↓
+SeiyuuMatch 3724 / 3725
+```
 
-#### GET `/health`
+服务器上准备好环境后，可以使用仓库里的部署模板：
+
+```bash
+sudo apt install -y nginx
+sudo cp deploy/seiyuumatch@.service /etc/systemd/system/seiyuumatch@.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now seiyuumatch@3724 seiyuumatch@3725
+
+sudo cp deploy/nginx-seiyuumatch.conf /etc/nginx/conf.d/seiyuumatch.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
 健康检查：
 
-```json
-{
-  "ok": true,
-  "people": 47
-}
-```
-
-#### GET `/face_groups`
-
-返回 `faces/` 中的团、声优列表和照片数量，用于前端选择识别范围与数据集上传。
-
-#### POST `/`
-
-上传图片并识别。支持查询参数：
-
-- `bands=mygo,avemujica`：限制识别候选团
-- `mode=relaxed`：使用低阈值检测人脸
-
-示例：
-
 ```bash
-curl --noproxy localhost \
-  -X POST 'http://localhost:3724/?bands=mygo,avemujica' \
-  --data-binary @photo.jpg
+curl http://127.0.0.1:3724/health
+curl http://127.0.0.1:3725/health
+curl http://127.0.0.1:8080/health
 ```
 
-响应包含最相似声优、bbox、当前相似度与 Top 5：
-
-```json
-{
-  "faces": ["羊宮妃那"],
-  "details": [
-    {
-      "name": "羊宮妃那",
-      "band": "mygo",
-      "similarity": 0.7812,
-      "top5": [
-        {"name": "羊宮妃那", "band": "mygo", "similarity": 0.7812}
-      ],
-      "bbox": [0.14, 0.21, 0.44, 0.78]
-    }
-  ],
-  "mode": "default",
-  "bands": ["avemujica", "mygo"]
-}
-```
-
-#### POST `/upload_faces`
-
-数据集贡献上传接口。前端会保存到：
+Cloudflare Tunnel 指向：
 
 ```
-faces_upload/<团>/<声优>/
+Type: HTTP
+URL: http://127.0.0.1:8080
 ```
 
-这些照片不会自动进入正式识别库，需要人工审核后移动到 `faces/`，再重新注册。
+双进程会提升并发能力和排队体验，但不会让单张照片的识别时间减半。
 
-## 人脸注册
+## 维护数据集
 
-正式数据放在：
+正式数据放在 `faces/`，用户贡献的照片会进入 `faces_upload/` 等待审核。
 
-```
-faces/<团>/<声优>/
-```
-
-例如：
-
-```
-faces/
-├── mygo/
-│   ├── 羊宮妃那/
-│   │   ├── 1.jpg
-│   │   └── 2.jpg
-│   └── 立石凛/
-└── avemujica/
-    └── 渡瀬結月/
-```
-
-前端识别结果展示的头像单独放在：
-
-```
-avatar/<声优>/1.jpg
-```
-
-服务端收到 `/avatar/<声优>` 请求时，会优先读取 `avatar/` 目录；如果没有找到头像，会临时回退到 `faces/` 中对应声优目录下的 `1.jpg`。
-
-添加或修改正式照片后，重新注册并重启服务：
+审核通过后，把照片移动到正式数据目录，然后重新注册特征：
 
 ```bash
 python3 register.py
-# 重启 server.py 即可加载新的 features.npz
+sudo systemctl restart 'seiyuumatch@*'
 ```
-
-`features.npz` 不是热更新，服务启动时只加载一次。
