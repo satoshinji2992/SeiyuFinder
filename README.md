@@ -2,37 +2,63 @@
 
 当前版本：`1.0.0`
 
-基于 MTCNN 人脸检测对齐 + AdaFace 人脸识别的邦多利女声优相似度识别 Web 应用。
+> 上传一张照片，看看你长得最像哪位邦多利女声优。
 
-当前功能：
+SeiyuuMatch 是一个面向邦多利企划粉丝的趣味识别小站。你可以上传自己的照片，选择想参与匹配的乐队范围，然后获得最相似的女声优结果、相似度和 Top 5 候选。
 
-- 上传照片后识别最相似的声优，并展示上传裁脸、匹配声优头像与 Top 5 相似度。
-- 支持按团选择识别范围，默认只启用 `mygo` 与 `avemujica`，这两组当前数据最多、稳定性最高。
-- 支持默认阈值识别与“降低阈值再试一次”二挡识别。
-- 提供隐私提示与数据集贡献入口，用户上传的数据集照片会先进入待审核目录。
-- 支持 Cloudflare Tunnel 暴露到固定域名或临时公网地址。
+[![Version](https://img.shields.io/badge/version-1.0.0-ff6b9d)](./CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-online-c44dff)](#)
+[![Dataset](https://img.shields.io/badge/dataset-48%20seiyuu-6c5ce7)](#)
+[![Privacy](https://img.shields.io/badge/privacy-upload%20notice-2d3436)](#隐私说明)
 
-## 目录结构
+## 可以玩什么
 
+| 功能 | 体验 |
+| --- | --- |
+| 上传照片识别 | 自动检测照片里的人脸，给出最像的声优 |
+| 多人照片 | 一张图里有多个人时，会分别给出结果 |
+| Top 5 相似度 | 不只看第一名，还能展开候选排行 |
+| 乐队范围筛选 | 只测 `MyGO!!!!!`、`Ave Mujica`、`sumimi`，或者全团一起测 |
+| 二挡阈值 | 识别不到时，可以降低阈值再试一次 |
+| 声优头像展示 | 结果卡片会展示匹配声优头像 |
+| 数据集贡献 | 可以上传公开、清晰的候选照片，帮助补数据 |
+| 反馈意见 | 页面内直接提交反馈，方便后续修正 |
+
+## 当前内容
+
+| 项目 | 状态 |
+| --- | --- |
+| 声优条目 | 48 |
+| 默认推荐范围 | `mygo`、`avemujica`、`sumimi` |
+| 头像展示 | 已独立到 `avatar/` |
+| 乐队图标 | 已独立到 `icon/` |
+| 数据集上传 | 进入 `faces_upload/`，需要人工审核 |
+| 固定域名部署 | 支持 Cloudflare Tunnel |
+
+## 页面入口
+
+正式站点建议通过 Cloudflare 域名访问：
+
+```text
+https://seiyuumatch.org
 ```
-├── faces/                  # 正式人脸库：faces/<团>/<声优>/
-├── avatar/                 # 前端展示头像：avatar/<声优>/1.jpg
-├── icon/                   # 前端展示团标：icon/<团>.png
-├── faces_upload/           # 用户上传的待审核数据集照片，不提交 Git
-├── uploads/                # 识别历史压缩图与 history.json，不提交 Git
-├── AdaFace/                # AdaFace 模型仓库
-│   └── pretrained/
-│       └── adaface_ir50_ms1mv2.ckpt
-├── register.py             # 注册正式人脸库并生成 features.npz
-├── server.py               # HTTP 识别服务与上传接口
-├── features.npz            # 注册生成的特征文件，包含 names/bands/features
-├── index.html              # 前端页面
-├── start_register.zsh      # 注册启动脚本
-├── start_server.zsh        # 服务启动脚本
-└── start_tunnel.zsh        # Cloudflare Quick Tunnel 临时公网脚本
+
+本地开发访问：
+
+```text
+http://localhost:3724
 ```
 
-## 快速开始
+## 使用提醒
+
+- 请上传清晰、正脸或半侧脸照片，遮挡太多会影响结果。
+- 识别结果只是娱乐向相似度，不代表真实身份、关系或评价。
+- 页面会先提示隐私说明，确认后才能使用。
+- 数据集贡献入口适合上传公开照片，不要上传敏感照片或没有权利处理的图片。
+
+## 本地运行
+
+想在本地跑起来，可以按下面操作：
 
 ```bash
 # 1. 创建环境
@@ -45,12 +71,6 @@ pip install opencv-python numpy torch pytorch-lightning pillow requests
 
 # 3. 启动服务
 ./start_server.zsh
-```
-
-浏览器访问：
-
-```text
-http://localhost:3724
 ```
 
 ## 环境检测与性能测试
