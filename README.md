@@ -1,10 +1,10 @@
 # SeiyuuMatch
 
-当前版本：`1.0.1`
+当前版本：`1.1.0`
 
 > 拍张照，测测你长得最像邦多利哪位女声优 🎸
 
-[![Version](https://img.shields.io/badge/version-1.0.1-ff6b9d)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-ff6b9d)](./CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-online-c44dff)](#)
 [![Dataset](https://img.shields.io/badge/dataset-48%20seiyuu-6c5ce7)](#)
 [![Privacy](https://img.shields.io/badge/privacy-upload%20notice-2d3436)](#隐私说明)
@@ -22,7 +22,7 @@
 | 上传照片识别   | 自动检测人脸，告诉你最像谁                       |
 | 多人合照       | 一张图里有几个人就出几份结果                     |
 | Top 5 候选排行 | 不只看第一名，展开看看其他候选人                 |
-| 乐队范围筛选   | 只测 MyGO!!!!!、Ave Mujica、sumimi，或者全员检测 |
+| 乐队范围筛选   | 可选择 MyGO!!!!!、Ave Mujica、sumimi 等多个团    |
 | 二挡模式       | 标准模式没识别到脸？降低阈值再来一次             |
 | 声优头像展示   | 结果卡片直接显示匹配声优的头像                   |
 | 数据集贡献     | 可以上传公开清晰的声优照片，帮我们补全数据       |
@@ -34,6 +34,7 @@
 | ------------ | -------------------------------- |
 | 声优条目     | 48 人                            |
 | 默认检测范围 | MyGO!!!!! / Ave Mujica / sumimi  |
+| 支持团体     | 已包含新旧共 13 个团体入口        |
 | 头像展示     | 独立存放在 `avatar/`             |
 | 乐队图标     | 独立存放在 `icon/`               |
 | 数据集上传   | 进入 `faces_upload/`，需人工审核 |
@@ -131,4 +132,17 @@ URL: http://127.0.0.1:8080
 ```bash
 python3 register.py
 sudo systemctl restart 'seiyuumatch@*'
+```
+
+只更新某个团：
+
+```bash
+python3 register.py --band mygo
+sudo systemctl restart 'seiyuumatch@*'
+```
+
+如果只改了已经生成好的 `features.npz`，只需要刷新服务：
+
+```bash
+sudo systemctl restart seiyuumatch@3724 seiyuumatch@3725
 ```

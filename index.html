@@ -25,6 +25,7 @@
 
         .privacy-locked>h1,
         .privacy-locked>.subtitle,
+        .privacy-locked>.subtitle-note,
         .privacy-locked>#bandFilter,
         .privacy-locked>#dropzone,
         .privacy-locked>#preview,
@@ -51,8 +52,21 @@
 
         .subtitle {
             color: #888;
-            margin: 8px 0 22px;
+            margin: 8px 0 8px;
             font-size: 20px;
+            text-align: center;
+            line-height: 1.5;
+            padding: 0 18px;
+        }
+
+        .subtitle-note {
+            color: #aaa;
+            margin: 0 0 22px;
+            font-size: 14px;
+            text-align: center;
+            line-height: 1.6;
+            padding: 0 20px;
+            max-width: 680px;
         }
 
         .band-filter {
@@ -795,7 +809,8 @@
     </div>
     <button id="privacyHelp" type="button" aria-label="查看隐私提示">?</button>
     <h1>你长得最像哪个邦多利女声优？</h1>
-    <p class="subtitle">上传一张照片，看看你最像谁!</p>
+    <p class="subtitle">上传一张照片，看看最像谁！</p>
+    <p class="subtitle-note">推荐使用公众人物或女声优照片体验，谨慎上传隐私图片</p>
     <section id="bandFilter" class="band-filter">
         <div class="band-filter-title">
             <h2>识别范围</h2>
@@ -1003,7 +1018,14 @@
                     populateBands();
                 })
                 .catch(() => {
-                    bandRoles = { mygo: ['小日向美香', '林鼓子', '立石凛', '羊宮妃那', '青木陽菜'] };
+                    bandRoles = {
+                        mygo: ['小日向美香', '林鼓子', '立石凛', '羊宮妃那', '青木陽菜'],
+                        avemujica: ['佐々木李子', '渡瀬結月', '米澤茜', '岡田夢以', '高尾奏音'],
+                        sumimi: ['佐々木李子', '反田葉月'],
+                        millsage: ['薬師寺李有', '千春', '結川あさき', '伊駒ゆりえ', '咲川ひなの'],
+                        dumbrock: ['橘めい', '涼泉桜花', '花宮初奈', '菱川花菜', '遠野ひかる'],
+                        mewtype: ['仲町あられ', '宮永ののか', '峰月律', '藤都子', '千石ユノ'],
+                    };
                     datasetCounts = {};
                     populateBands();
                 });
@@ -1252,7 +1274,7 @@
             retry.style.display = 'inline-block';
         }
 
-        function resizeImage(file, maxSize = 960, quality = 0.84) {
+        function resizeImage(file, maxSize = 1280, quality = 0.84) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 const url = URL.createObjectURL(file);
@@ -1298,18 +1320,23 @@
             return `${(value * 100).toFixed(1)}%`;
         }
 
+        function formatDisplayScore(detail) {
+            if (typeof detail.display_score === 'number') return `${detail.display_score}%`;
+            return formatSimilarity(detail.similarity);
+        }
+
         function renderTop5(top5) {
             const rows = (top5 || []).map((item, index) => `
                 <tr>
                     <td>${index + 1}</td>
                     <td>${item.name}<br><span style="color:#777">${item.band || ''}</span></td>
-                    <td>${formatSimilarity(item.similarity)}</td>
+                    <td>${formatDisplayScore(item)}</td>
                 </tr>
             `).join('');
             return `
                 <table>
-                    <caption>Top 5 相似度</caption>
-                    <thead><tr><th>#</th><th>声优</th><th>相似度</th></tr></thead>
+                    <caption>Top 5 匹配度</caption>
+                    <thead><tr><th>#</th><th>声优</th><th>匹配度</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             `;
@@ -1345,10 +1372,10 @@
       <div class="info">
         <div class="label">${faces.length > 1 ? '第 ' + (i + 1) + ' 张脸' : ''} 最像</div>
         <div class="name">${name}</div>
-        <div class="score">相似度 ${formatSimilarity(detail.similarity)}</div>
+        <div class="score">匹配度 ${formatDisplayScore(detail)}</div>
       </div>
       <div class="top5-wrap">
-        <button class="top5-help" type="button" aria-label="查看 Top 5 相似度">?</button>
+        <button class="top5-help" type="button" aria-label="查看 Top 5 匹配度">?</button>
         <div class="top5-popover">${renderTop5(detail.top5)}</div>
       </div>
     `;

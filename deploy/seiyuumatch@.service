@@ -13,7 +13,7 @@ Environment=OMP_NUM_THREADS=2
 Environment=MKL_NUM_THREADS=2
 Environment=RECOGNITION_QUEUE_TIMEOUT=30
 Environment=JOB_QUEUE_MAX_SIZE=200
-Environment=MAX_IMAGE_DIM=960
+Environment=MAX_IMAGE_DIM=1280
 
 [Install]
 WantedBy=multi-user.target

@@ -47,18 +47,21 @@ recognition_lock = threading.Lock()
 recognition_slots = threading.BoundedSemaphore(1)
 RECOGNITION_QUEUE_TIMEOUT = float(os.environ.get("RECOGNITION_QUEUE_TIMEOUT", "30"))
 JOB_QUEUE_MAX_SIZE = int(os.environ.get("JOB_QUEUE_MAX_SIZE", "200"))
-MAX_IMAGE_DIM = int(os.environ.get("MAX_IMAGE_DIM", "960"))
+MAX_IMAGE_DIM = int(os.environ.get("MAX_IMAGE_DIM", "1280"))
 MAX_UPLOAD_BYTES = 6 * 1024 * 1024
 MAX_FACE_UPLOAD_BYTES = 80 * 1024 * 1024
 MAX_FACE_UPLOAD_TOTAL_BYTES = 500 * 1024 * 1024
 MAX_FEEDBACK_BYTES = 16 * 1024
-DEFAULT_MTCNN_THRESHOLDS = [0.4, 0.5, 0.7]
+DEFAULT_MTCNN_THRESHOLDS = [0.6, 0.7, 0.7]
 LOW_MTCNN_THRESHOLDS = [0.2, 0.3, 0.5]
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 STATIC_CACHE_SECONDS = 7 * 24 * 60 * 60
 job_queue = queue.Queue(maxsize=JOB_QUEUE_MAX_SIZE)
 EXTRA_GROUP_MEMBERS = {
     "sumimi": ["佐々木李子"],
+    "millsage": ["薬師寺李有", "千春", "結川あさき", "伊駒ゆりえ", "咲川ひなの"],
+    "dumbrock": ["橘めい", "涼泉桜花", "花宮初奈", "菱川花菜", "遠野ひかる"],
+    "mewtype": ["仲町あられ", "宮永ののか", "峰月律", "藤都子", "千石ユノ"],
 }
 EXTRA_PERSON_BANDS = {
     "佐々木李子": ["sumimi"],
@@ -79,14 +82,34 @@ def file_lock(path):
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            corrupt_path = (
+                f"{HISTORY_FILE}.corrupt.{time.strftime('%Y%m%d_%H%M%S')}"
+            )
+            try:
+                os.replace(HISTORY_FILE, corrupt_path)
+                print(
+                    f"[server] history json is corrupt, moved to {corrupt_path}: {e}",
+                    flush=True,
+                )
+            except OSError as move_error:
+                print(
+                    f"[server] history json is corrupt and could not be moved: "
+                    f"{move_error}; original error: {e}",
+                    flush=True,
+                )
+            return []
     return []
 
 
 def save_history(history):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+    tmp_path = f"{HISTORY_FILE}.{uuid.uuid4().hex}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, HISTORY_FILE)
 
 
 def append_history(item):
@@ -275,6 +298,11 @@ def encode_bands(bands):
     return ",".join(sorted(dict.fromkeys(b for b in bands if b)))
 
 
+def display_score(similarity):
+    score = 100 / (1 + np.exp(-8 * (float(similarity) - 0.35)))
+    return int(round(max(0, min(99, score))))
+
+
 def infer_name_bands(names):
     groups, _ = load_face_groups()
     by_name = {}
@@ -372,7 +400,7 @@ def recognize(
         dtype=bool,
     )
     if not np.any(band_mask):
-        band_mask = np.ones(len(names), dtype=bool)
+        return []
     filtered_names = [name for name, keep in zip(names, band_mask) if keep]
     filtered_band_sets = [
         person_bands for person_bands, keep in zip(person_band_sets, band_mask) if keep
@@ -395,6 +423,7 @@ def recognize(
                 "band": encode_bands(filtered_band_sets[idx]),
                 "bands": sorted(filtered_band_sets[idx]),
                 "similarity": round(float(cos_results[idx]), 4),
+                "display_score": display_score(cos_results[idx]),
             }
             for idx in top_indices
         ]
@@ -413,6 +442,7 @@ def recognize(
                 "band": encode_bands(filtered_band_sets[max_idx]),
                 "bands": sorted(filtered_band_sets[max_idx]),
                 "similarity": round(float(cos_results[max_idx]), 4),
+                "display_score": display_score(cos_results[max_idx]),
                 "top5": top5,
                 "bbox": bbox,
             }

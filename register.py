@@ -46,7 +46,7 @@ def load_adaface():
 def load_mtcnn():
     m = MTCNN(device="cpu", crop_size=(112, 112))
     m.min_face_size = 12
-    m.thresholds = [0.4, 0.5, 0.7]
+    m.thresholds = [0.6, 0.7, 0.7]
     return m
 
 
@@ -127,6 +127,26 @@ def register_one(mtcnn, adaface, faces_dir, band, name):
     return name, encoded_bands, mean_vec
 
 
+def register_band(mtcnn, adaface, faces_dir, band):
+    band_dir = os.path.join(faces_dir, band)
+    if not os.path.isdir(band_dir):
+        print(f"Error: missing directory {band_dir}")
+        sys.exit(1)
+
+    registered = []
+    for person_dir in sorted(glob.glob(os.path.join(band_dir, "*"))):
+        if not os.path.isdir(person_dir):
+            continue
+        name = os.path.basename(person_dir)
+        name, encoded_bands, vector = register_one(mtcnn, adaface, faces_dir, band, name)
+        registered.append((name, encoded_bands, vector))
+
+    if not registered:
+        print(f"Error: no people found in {band_dir}")
+        sys.exit(1)
+    return registered
+
+
 def upsert_feature(output, name, band, vector):
     if os.path.exists(output):
         data = np.load(output, allow_pickle=True)
@@ -160,8 +180,8 @@ def upsert_feature(output, name, band, vector):
 def main():
     parser = argparse.ArgumentParser(description="Register faces and save features")
     parser.add_argument("-o", "--output", default=FEATURES_FILE)
-    parser.add_argument("--band", help="Only register one band/person pair")
-    parser.add_argument("--name", help="Only register one band/person pair")
+    parser.add_argument("--band", help="Only register one band, or one band/person pair")
+    parser.add_argument("--name", help="Only register one person with --band")
     args = parser.parse_args()
 
     print("Loading MTCNN...")
@@ -170,13 +190,22 @@ def main():
     print("Loading AdaFace...")
     adaface = load_adaface()
 
-    if args.band or args.name:
-        if not args.band or not args.name:
-            print("Error: --band and --name must be used together")
-            sys.exit(1)
+    if args.name and not args.band:
+        print("Error: --name must be used with --band")
+        sys.exit(1)
+
+    if args.band and args.name:
         print(f"Registering one person from {FACES_DIR}/{args.band}/{args.name}...")
         name, band, vector = register_one(mtcnn, adaface, FACES_DIR, args.band, args.name)
         upsert_feature(args.output, name, band, vector)
+        return
+
+    if args.band:
+        print(f"Registering band from {FACES_DIR}/{args.band}...")
+        registered = register_band(mtcnn, adaface, FACES_DIR, args.band)
+        for name, band, vector in registered:
+            upsert_feature(args.output, name, band, vector)
+        print(f"Registered band {args.band}: {[name for name, _, _ in registered]}")
         return
 
     print(f"Registering faces from {FACES_DIR}...")
