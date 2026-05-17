@@ -572,6 +572,9 @@ MODEL_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "AdaFace/pretrained/adaface_ir50_ms1mv2.ckpt",
 )
+INSIGHTFACE_DET_SIZE = int(os.environ.get("INSIGHTFACE_DET_SIZE", "640"))
+INSIGHTFACE_DEFAULT_DET_SCORE = float(os.environ.get("INSIGHTFACE_DEFAULT_DET_SCORE", "0.5"))
+INSIGHTFACE_RELAXED_DET_SCORE = float(os.environ.get("INSIGHTFACE_RELAXED_DET_SCORE", "0.3"))
 
 
 def load_adaface():
@@ -609,6 +612,159 @@ def resize_for_recognition(img):
     scale = MAX_IMAGE_DIM / longest
     new_size = (int(width * scale), int(height * scale))
     return cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
+
+
+def load_insightface():
+    from insightface.app import FaceAnalysis
+    app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+    app.prepare(ctx_id=0, det_size=(INSIGHTFACE_DET_SIZE, INSIGHTFACE_DET_SIZE))
+    return app
+
+
+def recognize_insightface(
+    insightface_app,
+    names,
+    bands,
+    feature_db,
+    feature_norms,
+    image_bytes,
+    det_score_threshold,
+    selected_bands,
+):
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img_raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img_raw is None:
+        return []
+    img_raw = resize_for_recognition(img_raw)
+    detected_faces = insightface_app.get(img_raw)
+    detected_faces = [f for f in detected_faces if f.det_score >= det_score_threshold]
+
+    results = []
+    person_band_sets = [parse_person_bands(band) for band in bands]
+    band_mask = np.array(
+        [bool(person_bands & selected_bands) for person_bands in person_band_sets],
+        dtype=bool,
+    )
+    easter_egg_indices = [
+        idx
+        for idx, name in enumerate(names)
+        if EASTER_EGG_BAND in person_band_sets[idx]
+        and (name.lower() == EASTER_EGG_NAME.lower() or name == BIG_BROTHER_NAME)
+    ]
+    for idx in easter_egg_indices:
+        band_mask[idx] = True
+    if not np.any(band_mask):
+        return []
+    filtered_names = [name for name, keep in zip(names, band_mask) if keep]
+    filtered_band_sets = [
+        person_bands for person_bands, keep in zip(person_band_sets, band_mask) if keep
+    ]
+    filtered_features = feature_db[band_mask]
+    filtered_norms = feature_norms[band_mask]
+    img_h, img_w = img_raw.shape[:2]
+    for face in detected_faces:
+        vec = face.normed_embedding
+        vec_norm = np.linalg.norm(vec)
+        if vec_norm == 0:
+            continue
+        cos_results = filtered_features @ vec / (filtered_norms * vec_norm)
+        easter_egg_filtered_idx = next(
+            (
+                idx
+                for idx, name in enumerate(filtered_names)
+                if name.lower() == EASTER_EGG_NAME.lower()
+                and EASTER_EGG_BAND in filtered_band_sets[idx]
+            ),
+            None,
+        )
+        big_brother_filtered_idx = next(
+            (
+                idx
+                for idx, name in enumerate(filtered_names)
+                if name == BIG_BROTHER_NAME
+                and EASTER_EGG_BAND in filtered_band_sets[idx]
+            ),
+            None,
+        )
+        hidden_indices = {
+            idx
+            for idx in (easter_egg_filtered_idx, big_brother_filtered_idx)
+            if idx is not None
+        }
+        raw_max_idx = int(np.argmax(cos_results))
+        visible_indices = [
+            idx for idx in range(len(cos_results)) if idx not in hidden_indices
+        ]
+        if not visible_indices and raw_max_idx not in hidden_indices:
+            visible_indices = [raw_max_idx]
+        if not visible_indices:
+            continue
+        max_idx = max(visible_indices, key=lambda idx: cos_results[idx])
+        if (
+            big_brother_filtered_idx is not None
+            and display_score(cos_results[big_brother_filtered_idx])
+            >= BIG_BROTHER_TRIGGER_SCORE
+        ):
+            max_idx = big_brother_filtered_idx
+            easter_egg_triggered = "big_brother"
+        elif (
+            easter_egg_filtered_idx is not None
+            and display_score(cos_results[easter_egg_filtered_idx])
+            >= EASTER_EGG_TRIGGER_SCORE
+        ):
+            max_idx = easter_egg_filtered_idx
+            easter_egg_triggered = "liyuu"
+        else:
+            easter_egg_triggered = ""
+        top_indices = [
+            idx
+            for idx in np.argsort(cos_results)[::-1]
+            if idx not in hidden_indices
+        ][:5]
+        top5 = [
+            {
+                "name": filtered_names[idx],
+                "band": encode_bands(filtered_band_sets[idx]),
+                "bands": sorted(filtered_band_sets[idx]),
+                "similarity": round(float(cos_results[idx]), 4),
+                "display_score": display_score(cos_results[idx]),
+            }
+            for idx in top_indices
+        ]
+        bbox = None
+        box = face.bbox
+        if box is not None:
+            bbox = [
+                float(box[0]) / img_w,
+                float(box[1]) / img_h,
+                float(box[2]) / img_w,
+                float(box[3]) / img_h,
+            ]
+        results.append(
+            {
+                "name": (
+                    EASTER_EGG_DISPLAY_NAME
+                    if easter_egg_triggered == "liyuu"
+                    else filtered_names[max_idx]
+                ),
+                "avatar_name": filtered_names[max_idx],
+                "band": encode_bands(filtered_band_sets[max_idx]),
+                "bands": sorted(filtered_band_sets[max_idx]),
+                "similarity": round(float(cos_results[max_idx]), 4),
+                "display_score": display_score(cos_results[max_idx]),
+                "top5": [] if easter_egg_triggered else top5,
+                "easter_egg": easter_egg_triggered,
+                "easter_egg_message": (
+                    EASTER_EGG_MESSAGE
+                    if easter_egg_triggered == "liyuu"
+                    else BIG_BROTHER_MESSAGE
+                    if easter_egg_triggered == "big_brother"
+                    else ""
+                ),
+                "bbox": bbox,
+            }
+        )
+    return results
 
 
 def recognize(
@@ -767,6 +923,8 @@ def recognize(
 class FaceHandler(BaseHTTPRequestHandler):
     mtcnn = None
     adaface = None
+    insightface_app = None
+    backend = "insightface"
     names = None
     bands = None
     feature_db = None
@@ -778,17 +936,33 @@ class FaceHandler(BaseHTTPRequestHandler):
         day = daily_key(now)
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", now)
         with recognition_lock:
-            result = recognize(
-                cls.mtcnn,
-                cls.adaface,
-                cls.names,
-                cls.bands,
-                cls.feature_db,
-                cls.feature_norms,
-                body,
-                thresholds,
-                selected_bands,
-            )
+            if cls.backend == "insightface":
+                det_score_threshold = (
+                    INSIGHTFACE_RELAXED_DET_SCORE if relaxed
+                    else INSIGHTFACE_DEFAULT_DET_SCORE
+                )
+                result = recognize_insightface(
+                    cls.insightface_app,
+                    cls.names,
+                    cls.bands,
+                    cls.feature_db,
+                    cls.feature_norms,
+                    body,
+                    det_score_threshold,
+                    selected_bands,
+                )
+            else:
+                result = recognize(
+                    cls.mtcnn,
+                    cls.adaface,
+                    cls.names,
+                    cls.bands,
+                    cls.feature_db,
+                    cls.feature_norms,
+                    body,
+                    thresholds,
+                    selected_bands,
+                )
         photo_name = f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}.jpg"
         photo_dir = daily_upload_dir(day)
         os.makedirs(photo_dir, exist_ok=True)
@@ -1313,13 +1487,22 @@ def main():
     parser.add_argument("--port", type=int, default=3724)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("-f", "--features", default=FEATURES_FILE)
+    parser.add_argument("--backend", choices=["insightface", "adaface"], default="insightface")
     args = parser.parse_args()
 
-    print("Loading MTCNN...")
-    mtcnn = load_mtcnn()
-
-    print("Loading AdaFace...")
-    adaface = load_adaface()
+    if args.backend == "insightface":
+        print("Loading InsightFace buffalo_l...")
+        insightface_app = load_insightface()
+        FaceHandler.insightface_app = insightface_app
+        FaceHandler.backend = "insightface"
+    else:
+        print("Loading MTCNN...")
+        mtcnn = load_mtcnn()
+        print("Loading AdaFace...")
+        adaface = load_adaface()
+        FaceHandler.mtcnn = mtcnn
+        FaceHandler.adaface = adaface
+        FaceHandler.backend = "adaface"
 
     print(f"Loading features from {args.features}...")
     data = np.load(args.features, allow_pickle=True)
@@ -1332,8 +1515,6 @@ def main():
     feature_norms = np.linalg.norm(feature_db, axis=1)
     print(f"Loaded {len(names)} people, feature dim: {feature_db.shape[1]}")
 
-    FaceHandler.mtcnn = mtcnn
-    FaceHandler.adaface = adaface
     FaceHandler.names = names
     FaceHandler.bands = bands
     FaceHandler.feature_db = feature_db
