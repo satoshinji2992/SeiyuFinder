@@ -32,10 +32,13 @@ FACES_UPLOAD_DIR = os.path.join(
 FEEDBACK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback")
 JOBS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jobs")
 FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "feedback.jsonl")
-HISTORY_FILE = os.path.join(UPLOADS_DIR, "history.json")
+UPLOAD_PHOTOS_DIR = os.path.join(UPLOADS_DIR, "photos")
+HISTORY_DIR = os.path.join(UPLOADS_DIR, "history")
 HISTORY_LOCK_FILE = os.path.join(UPLOADS_DIR, ".history.lock")
 JOBS_LOCK_FILE = os.path.join(JOBS_DIR, ".jobs.lock")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+os.makedirs(UPLOAD_PHOTOS_DIR, exist_ok=True)
+os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs(AVATAR_DIR, exist_ok=True)
 os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(FACES_UPLOAD_DIR, exist_ok=True)
@@ -52,7 +55,7 @@ MAX_UPLOAD_BYTES = 6 * 1024 * 1024
 MAX_FACE_UPLOAD_BYTES = 80 * 1024 * 1024
 MAX_FACE_UPLOAD_TOTAL_BYTES = 500 * 1024 * 1024
 MAX_FEEDBACK_BYTES = 16 * 1024
-DEFAULT_MTCNN_THRESHOLDS = [0.5, 0.7, 0.7]
+DEFAULT_MTCNN_THRESHOLDS = [0.3, 0.7, 0.7]
 LOW_MTCNN_THRESHOLDS = [0.2, 0.3, 0.5]
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 STATIC_CACHE_SECONDS = 7 * 24 * 60 * 60
@@ -88,44 +91,25 @@ def file_lock(path):
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            corrupt_path = (
-                f"{HISTORY_FILE}.corrupt.{time.strftime('%Y%m%d_%H%M%S')}"
-            )
-            try:
-                os.replace(HISTORY_FILE, corrupt_path)
-                print(
-                    f"[server] history json is corrupt, moved to {corrupt_path}: {e}",
-                    flush=True,
-                )
-            except OSError as move_error:
-                print(
-                    f"[server] history json is corrupt and could not be moved: "
-                    f"{move_error}; original error: {e}",
-                    flush=True,
-                )
-            return []
-    return []
+def daily_key(now=None):
+    return time.strftime("%Y-%m-%d", now or time.localtime())
 
 
-def save_history(history):
-    tmp_path = f"{HISTORY_FILE}.{uuid.uuid4().hex}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
-    os.replace(tmp_path, HISTORY_FILE)
+def daily_upload_dir(day):
+    return os.path.join(UPLOAD_PHOTOS_DIR, safe_path_segment(day, "unknown_date"))
 
 
-def append_history(item):
+def daily_history_file(day):
+    filename = f"{safe_path_segment(day, 'unknown_date')}.jsonl"
+    return os.path.join(HISTORY_DIR, filename)
+
+
+def append_history(item, day):
     with history_lock:
         with file_lock(HISTORY_LOCK_FILE):
-            history = load_history()
-            history.append(item)
-            save_history(history)
+            history_path = daily_history_file(day)
+            with open(history_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 
 def job_path(job_id):
@@ -476,11 +460,8 @@ def recognize(
             easter_egg_triggered = "big_brother"
         elif (
             easter_egg_filtered_idx is not None
-            and (
-                raw_max_idx == easter_egg_filtered_idx
-                or display_score(cos_results[easter_egg_filtered_idx])
-                >= EASTER_EGG_TRIGGER_SCORE
-            )
+            and display_score(cos_results[easter_egg_filtered_idx])
+            >= EASTER_EGG_TRIGGER_SCORE
         ):
             max_idx = easter_egg_filtered_idx
             easter_egg_triggered = "liyuu"
@@ -547,6 +528,9 @@ class FaceHandler(BaseHTTPRequestHandler):
 
     @classmethod
     def process_recognition(cls, body, thresholds, selected_bands, relaxed, queue_wait):
+        now = time.localtime()
+        day = daily_key(now)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", now)
         with recognition_lock:
             result = recognize(
                 cls.mtcnn,
@@ -560,21 +544,27 @@ class FaceHandler(BaseHTTPRequestHandler):
                 selected_bands,
             )
         photo_name = f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}.jpg"
-        photo_path = os.path.join(UPLOADS_DIR, photo_name)
+        photo_dir = daily_upload_dir(day)
+        os.makedirs(photo_dir, exist_ok=True)
+        photo_path = os.path.join(photo_dir, photo_name)
+        photo_relpath = f"uploads/photos/{day}/{photo_name}"
         nparr = np.frombuffer(body, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is not None:
             img = resize_for_recognition(img)
-            cv2.imwrite(photo_path, img, [cv2.IMWRITE_JPEG_QUALITY, 10])
-            append_history(
-                {
-                    "photo": f"uploads/{photo_name}",
-                    "faces": result,
-                    "mode": "relaxed" if relaxed else "default",
-                    "bands": sorted(selected_bands),
-                    "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            )
+            if cv2.imwrite(photo_path, img, [cv2.IMWRITE_JPEG_QUALITY, 10]):
+                append_history(
+                    {
+                        "photo": photo_relpath,
+                        "faces": result,
+                        "mode": "relaxed" if relaxed else "default",
+                        "bands": sorted(selected_bands),
+                        "time": timestamp,
+                    },
+                    day,
+                )
+            else:
+                print(f"[server] failed to save upload photo: {photo_path}", flush=True)
         return make_recognition_payload(
             result, relaxed, thresholds, selected_bands, queue_wait
         )
