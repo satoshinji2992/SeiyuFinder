@@ -702,6 +702,7 @@ def recognize_insightface(
         max_idx = max(visible_indices, key=lambda idx: cos_results[idx])
         if (
             big_brother_filtered_idx is not None
+            and big_brother_filtered_idx == raw_max_idx
             and display_score(cos_results[big_brother_filtered_idx])
             >= BIG_BROTHER_TRIGGER_SCORE
         ):
@@ -709,6 +710,7 @@ def recognize_insightface(
             easter_egg_triggered = "big_brother"
         elif (
             easter_egg_filtered_idx is not None
+            and easter_egg_filtered_idx == raw_max_idx
             and display_score(cos_results[easter_egg_filtered_idx])
             >= EASTER_EGG_TRIGGER_SCORE
         ):
@@ -855,6 +857,7 @@ def recognize(
         max_idx = max(visible_indices, key=lambda idx: cos_results[idx])
         if (
             big_brother_filtered_idx is not None
+            and big_brother_filtered_idx == raw_max_idx
             and display_score(cos_results[big_brother_filtered_idx])
             >= BIG_BROTHER_TRIGGER_SCORE
         ):
@@ -862,6 +865,7 @@ def recognize(
             easter_egg_triggered = "big_brother"
         elif (
             easter_egg_filtered_idx is not None
+            and easter_egg_filtered_idx == raw_max_idx
             and display_score(cos_results[easter_egg_filtered_idx])
             >= EASTER_EGG_TRIGGER_SCORE
         ):
